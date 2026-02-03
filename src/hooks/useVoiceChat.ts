@@ -107,10 +107,16 @@ export function useVoiceChat() {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let textBuffer = "";
+      let streamDone = false;
 
-      while (true) {
+      console.log("[Chat] Starting to read stream...");
+
+      while (!streamDone) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          console.log("[Chat] Stream reader done");
+          break;
+        }
         
         textBuffer += decoder.decode(value, { stream: true });
         
@@ -124,7 +130,11 @@ export function useVoiceChat() {
           if (!line.startsWith("data: ")) continue;
 
           const jsonStr = line.slice(6).trim();
-          if (jsonStr === "[DONE]") break;
+          if (jsonStr === "[DONE]") {
+            console.log("[Chat] Received [DONE]");
+            streamDone = true;
+            break;
+          }
 
           try {
             const parsed = JSON.parse(jsonStr);
@@ -132,6 +142,7 @@ export function useVoiceChat() {
             // Handle agent info event
             if (parsed.type === "agent_info") {
               detectedAgent = parsed.agent;
+              console.log("[Chat] Detected agent:", parsed.agent);
               setCurrentAgent(parsed.agent);
               if (parsed.workflowState) {
                 setWorkflowState(prev => ({
@@ -164,11 +175,14 @@ export function useVoiceChat() {
               });
             }
           } catch {
+            // Incomplete JSON, put it back
             textBuffer = line + "\n" + textBuffer;
             break;
           }
         }
       }
+      
+      console.log("[Chat] Stream complete, assistantContent length:", assistantContent.length);
 
       // Parse and apply state updates from the response
       const stateUpdates = parseStateUpdates(assistantContent);
