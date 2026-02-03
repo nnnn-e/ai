@@ -73,6 +73,7 @@ export function useVoiceChat() {
 
   // Internal recording function that doesn't depend on streamChat
   const startRecordingInternal = useCallback(async () => {
+    console.log("Starting recording...");
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mediaRecorder = new MediaRecorder(stream);
@@ -80,19 +81,29 @@ export function useVoiceChat() {
       audioChunksRef.current = [];
 
       mediaRecorder.ondataavailable = (event) => {
+        console.log("Audio data available:", event.data.size);
         if (event.data.size > 0) {
           audioChunksRef.current.push(event.data);
         }
       };
 
       mediaRecorder.onstop = async () => {
+        console.log("Recording stopped, processing audio...");
         const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        console.log("Audio blob size:", audioBlob.size);
         stream.getTracks().forEach(track => track.stop());
+        
+        // Don't process if audio is too short (less than 1KB)
+        if (audioBlob.size < 1000) {
+          console.log("Audio too short, skipping STT");
+          return;
+        }
         
         try {
           const formData = new FormData();
           formData.append("audio", audioBlob, "recording.webm");
 
+          console.log("Sending audio to STT...");
           const response = await fetch(STT_URL, {
             method: "POST",
             headers: {
@@ -102,12 +113,20 @@ export function useVoiceChat() {
           });
 
           if (!response.ok) {
+            const errorText = await response.text();
+            console.error("STT response error:", response.status, errorText);
             throw new Error("STT request failed");
           }
 
           const data = await response.json();
+          console.log("STT result:", data);
           if (data.text && streamChatRef.current) {
             await streamChatRef.current(data.text);
+          } else if (!data.text) {
+            toast({
+              title: "未检测到语音",
+              description: "请说话后再点击麦克风",
+            });
           }
         } catch (error) {
           console.error("STT error:", error);
