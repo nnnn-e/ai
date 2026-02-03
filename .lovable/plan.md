@@ -1,68 +1,78 @@
 
-
-# 切换到 DeepSeek 模型
+# 对话界面改为左右布局
 
 ## 概述
-将当前使用的 Lovable AI Gateway（gemini-2.5-flash-lite）替换为您自己的 DeepSeek API，以获得更快的响应速度。
+将当前的单栏对话界面改为左右分栏布局：
+- **左侧**：对话区域（聊天消息 + 输入框 + 麦克风按钮）
+- **右侧**：简历实时预览（随对话更新）
+
+## 布局设计
+
+```text
++------------------------------------------+
+|              顶部标题栏                    |
++------------------------------------------+
+|                |                          |
+|    对话区域     |     简历实时预览           |
+|   (约 50%)     |      (约 50%)            |
+|                |                          |
+|  [聊天消息]     |   [姓名、职位]             |
+|  [输入框]       |   [联系方式]              |
+|  [麦克风]       |   [工作经历]              |
+|                |   [教育背景]              |
+|                |   [技能]                  |
++------------------------------------------+
+```
 
 ## 实施步骤
 
-### 第1步：添加 DeepSeek API Key
-- 在项目密钥中添加 `DEEPSEEK_API_KEY`
-- 您需要从 DeepSeek 官网获取 API Key
+### 第1步：创建内嵌简历预览组件
+创建 `src/components/ResumePanel.tsx`：
+- 复用 `ResumePreview` 的内容展示逻辑
+- 移除全屏页面样式，改为适配侧边栏
+- 简历为空时显示占位提示（如"对话完成后将生成简历"）
+- 添加导出 PDF 按钮
 
-### 第2步：修改 Edge Function
-修改 `supabase/functions/agent-router/index.ts`：
+### 第2步：修改 Index.tsx 布局
+使用 `ResizablePanelGroup` 实现可调整的左右分栏：
+- 左侧面板（50%）：保留现有的对话界面组件
+- 右侧面板（50%）：嵌入新的 `ResumePanel` 组件
+- 可拖拽的分隔条便于调整比例
 
-**更改内容：**
-1. 将 API 端点从 `https://ai.gateway.lovable.dev/v1/chat/completions` 改为 `https://api.deepseek.com/v1/chat/completions`
-2. 将模型名称从 `google/gemini-2.5-flash-lite` 改为 `deepseek-chat`
-3. 将 Authorization header 从 `LOVABLE_API_KEY` 改为 `DEEPSEEK_API_KEY`
-4. 同样更新 `checkIntegrity` 函数中的 API 调用
+### 第3步：移动端适配
+- 小屏幕（< 768px）时改为上下布局或隐藏简历面板
+- 添加切换按钮让用户在移动端手动查看简历
 
-**代码更改示例：**
-```typescript
-// 之前
-const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-  headers: {
-    Authorization: `Bearer ${LOVABLE_API_KEY}`,
-  },
-  body: JSON.stringify({
-    model: "google/gemini-2.5-flash-lite",
-    ...
-  }),
-});
+## 组件结构
 
-// 之后
-const DEEPSEEK_API_KEY = Deno.env.get("DEEPSEEK_API_KEY");
-const response = await fetch("https://api.deepseek.com/v1/chat/completions", {
-  headers: {
-    Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
-  },
-  body: JSON.stringify({
-    model: "deepseek-chat",
-    ...
-  }),
-});
+```text
+Index.tsx
+├── Header（标题 + 进度条）
+└── ResizablePanelGroup
+    ├── ResizablePanel（左侧对话）
+    │   ├── ChatMessages
+    │   ├── ChatInput
+    │   └── MicrophoneButton
+    ├── ResizableHandle
+    └── ResizablePanel（右侧简历）
+        └── ResumePanel
 ```
-
----
 
 ## 技术细节
 
-### DeepSeek API 信息
-- **API 端点**: `https://api.deepseek.com/v1/chat/completions`
-- **可用模型**:
-  - `deepseek-chat` - 通用对话模型（推荐用于快速响应）
-  - `deepseek-reasoner` - 推理增强模型（响应更慢但推理能力更强）
-- **API 格式**: 与 OpenAI API 完全兼容，支持流式响应
+### 依赖
+- 项目已安装 `react-resizable-panels`
+- 已有 `ResizablePanelGroup`、`ResizablePanel`、`ResizableHandle` 组件
 
-### 需要修改的位置
-1. **主 AI 调用**（第 264-327 行）：替换主对话 API 调用
-2. **完整性检查**（第 222-255 行）：替换 `checkIntegrity` 函数中的 API 调用
+### ResumePanel 组件设计
+```typescript
+interface ResumePanelProps {
+  resume: ResumeData | null;
+  onExport: () => void;
+}
+```
 
-### 预期效果
-- DeepSeek API 通常响应更快，可解决之前的超时问题
-- 中文对话质量应该会有所提升
-
+### 移动端响应式
+使用 `use-mobile` hook 检测屏幕尺寸，小屏时：
+- 默认只显示对话区域
+- 提供悬浮按钮切换到简历视图
