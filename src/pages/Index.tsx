@@ -158,7 +158,7 @@ const Index = () => {
   return (
     <div className="h-screen bg-background flex">
       {/* Left: Header + Chat */}
-      <div className="flex-1 flex flex-col">
+      <div className="w-[30%] flex flex-col">
         {/* Header with progress */}
         <div className="px-6 py-4">
           <div className="flex items-center justify-between mb-2">
@@ -187,7 +187,7 @@ const Index = () => {
       </div>
 
       {/* Right: Resume Preview */}
-      <div className="w-1/2 m-4 rounded-xl bg-card overflow-hidden">
+      <div className="flex-1 m-4 rounded-xl bg-card overflow-hidden">
         <ResumePanel resume={resumeData} onExport={handleExportPDF} />
       </div>
     </div>
