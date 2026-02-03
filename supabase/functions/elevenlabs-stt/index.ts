@@ -26,7 +26,7 @@ serve(async (req) => {
     const apiFormData = new FormData();
     apiFormData.append("file", audioFile);
     apiFormData.append("model_id", "scribe_v2");
-    apiFormData.append("language_code", "cmn"); // Mandarin Chinese
+    apiFormData.append("language_code", "zho"); // Chinese
 
     const response = await fetch("https://api.elevenlabs.io/v1/speech-to-text", {
       method: "POST",
