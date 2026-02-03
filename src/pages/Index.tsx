@@ -100,7 +100,7 @@ const Index = () => {
     return (
       <div className="min-h-screen bg-background flex flex-col">
         {/* Header with progress */}
-        <div className="px-4 py-3 border-b border-border">
+        <div className="px-4 py-3">
           <div className="flex items-center justify-between mb-2">
             <h1 className="text-lg font-light tracking-wide">职途</h1>
             <Button
@@ -158,7 +158,7 @@ const Index = () => {
   return (
     <div className="h-screen bg-background flex flex-col">
       {/* Header with progress */}
-      <div className="px-6 py-4 border-b border-border">
+      <div className="px-6 py-4">
         <div className="flex items-center justify-between mb-2">
           <h1 className="text-lg font-light tracking-wide">职途</h1>
         </div>
@@ -190,8 +190,8 @@ const Index = () => {
           </div>
         </ResizablePanel>
 
-        {/* Resize Handle */}
-        <ResizableHandle withHandle />
+        {/* Spacer */}
+        <div className="w-2" />
 
         {/* Right Panel: Resume Preview */}
         <ResizablePanel defaultSize={50} minSize={25}>
