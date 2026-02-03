@@ -256,7 +256,7 @@ async function checkIntegrity(content: string, apiKey: string): Promise<any> {
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response("ok", { headers: corsHeaders });
   }
 
   try {
@@ -350,9 +350,8 @@ serve(async (req) => {
         });
       }
 
-    // Create a transform stream to inject agent info and process state updates
+    // Create a ReadableStream that first sends agent info, then pipes AI response
     const encoder = new TextEncoder();
-    const decoder = new TextDecoder();
     
     // Send agent info as first event
     const agentInfoEvent = `data: ${JSON.stringify({
@@ -365,28 +364,27 @@ serve(async (req) => {
       }
     })}\n\n`;
 
-    const { readable, writable } = new TransformStream();
-    const writer = writable.getWriter();
-    
-    // Write agent info first
-    await writer.write(encoder.encode(agentInfoEvent));
-    
-    // Pipe the rest of the response
     const reader = response.body!.getReader();
     
-    (async () => {
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          await writer.write(value);
+    const stream = new ReadableStream({
+      async start(controller) {
+        // Send agent info first
+        controller.enqueue(encoder.encode(agentInfoEvent));
+      },
+      async pull(controller) {
+        const { done, value } = await reader.read();
+        if (done) {
+          controller.close();
+        } else {
+          controller.enqueue(value);
         }
-      } finally {
-        await writer.close();
+      },
+      cancel() {
+        reader.cancel();
       }
-    })();
+    });
 
-    return new Response(readable, {
+    return new Response(stream, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
     } catch (fetchError) {
