@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { toast } from "@/hooks/use-toast";
 import type { ChatMessage, ResumeData } from "@/types/resume";
 import type { WorkflowState, AgentType } from "@/types/agents";
@@ -315,7 +315,9 @@ export function useVoiceChat() {
   }, [messages, playAudio, extractResumeData, workflowState]);
 
   // Keep streamChatRef updated
-  streamChatRef.current = streamChat;
+  useEffect(() => {
+    streamChatRef.current = streamChat;
+  }, [streamChat]);
 
   // Public startRecording just calls the internal one
   const startRecording = startRecordingInternal;
