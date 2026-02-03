@@ -1,11 +1,60 @@
 import { useState, useCallback, useRef } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import type { ChatMessage, ResumeData } from "@/types/resume";
+import type { WorkflowState, AgentType } from "@/types/agents";
+import { INITIAL_WORKFLOW_STATE } from "@/types/agents";
 
-const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/resume-chat`;
+const AGENT_ROUTER_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/agent-router`;
 const TTS_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`;
 const STT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-stt`;
+
+// Parse state updates from agent response
+function parseStateUpdates(content: string): Partial<WorkflowState> {
+  const updates: Partial<WorkflowState> = {};
+  const stateUpdateRegex = /\[STATE_UPDATE:\s*([^\]]+)\]/g;
+  let match;
+  
+  while ((match = stateUpdateRegex.exec(content)) !== null) {
+    const updateStr = match[1];
+    const keyValueMatch = updateStr.match(/(\w+)=(.+)/);
+    if (keyValueMatch) {
+      const key = keyValueMatch[1] as keyof WorkflowState;
+      const rawValue = keyValueMatch[2].trim();
+      let value: any = rawValue;
+      
+      if (rawValue.startsWith('{') || rawValue.startsWith('[')) {
+        try {
+          value = JSON.parse(rawValue);
+        } catch {
+          // Keep as string
+        }
+      } else if (rawValue === 'true') {
+        value = true;
+      } else if (rawValue === 'false') {
+        value = false;
+      } else if (rawValue.startsWith('"') && rawValue.endsWith('"')) {
+        value = rawValue.slice(1, -1);
+      }
+      
+      (updates as any)[key] = value;
+    }
+  }
+  
+  return updates;
+}
+
+// Clean response by removing state update tags
+function cleanResponse(content: string): string {
+  return content.replace(/\[STATE_UPDATE:[^\]]+\]/g, '').trim();
+}
+
+// Determine workflow phase based on state
+function determinePhase(state: WorkflowState): WorkflowState["currentPhase"] {
+  if (!state.goalConfirmed) return "goal_clarification";
+  if (state.resumeProvided && !state.recruiterVerdict) return "recruiter_review";
+  if (!state.optimizationConfirmed) return "diagnosis";
+  return "rewriting";
+}
 
 export function useVoiceChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -13,6 +62,8 @@ export function useVoiceChat() {
   const [isRecording, setIsRecording] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [resumeData, setResumeData] = useState<ResumeData | null>(null);
+  const [workflowState, setWorkflowState] = useState<WorkflowState>(INITIAL_WORKFLOW_STATE);
+  const [currentAgent, setCurrentAgent] = useState<AgentType | null>(null);
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -71,15 +122,19 @@ export function useVoiceChat() {
     setIsLoading(true);
 
     let assistantContent = "";
+    let detectedAgent: AgentType | null = null;
 
     try {
-      const response = await fetch(CHAT_URL, {
+      const response = await fetch(AGENT_ROUTER_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
-        body: JSON.stringify({ messages: newMessages }),
+        body: JSON.stringify({ 
+          messages: newMessages.map(m => ({ role: m.role, content: m.content })),
+          workflowState 
+        }),
       });
 
       if (!response.ok || !response.body) {
@@ -110,17 +165,39 @@ export function useVoiceChat() {
 
           try {
             const parsed = JSON.parse(jsonStr);
+            
+            // Handle agent info event
+            if (parsed.type === "agent_info") {
+              detectedAgent = parsed.agent;
+              setCurrentAgent(parsed.agent);
+              if (parsed.workflowState) {
+                setWorkflowState(prev => ({
+                  ...prev,
+                  ...parsed.workflowState,
+                  currentPhase: determinePhase({ ...prev, ...parsed.workflowState })
+                }));
+              }
+              continue;
+            }
+            
             const content = parsed.choices?.[0]?.delta?.content;
             if (content) {
               assistantContent += content;
+              const cleanedContent = cleanResponse(assistantContent);
               setMessages(prev => {
                 const last = prev[prev.length - 1];
                 if (last?.role === "assistant") {
                   return prev.map((m, i) => 
-                    i === prev.length - 1 ? { ...m, content: assistantContent } : m
+                    i === prev.length - 1 
+                      ? { ...m, content: cleanedContent, agent: detectedAgent || undefined } 
+                      : m
                   );
                 }
-                return [...prev, { role: "assistant", content: assistantContent }];
+                return [...prev, { 
+                  role: "assistant", 
+                  content: cleanedContent,
+                  agent: detectedAgent || undefined
+                }];
               });
             }
           } catch {
@@ -130,14 +207,27 @@ export function useVoiceChat() {
         }
       }
 
+      // Parse and apply state updates from the response
+      const stateUpdates = parseStateUpdates(assistantContent);
+      if (Object.keys(stateUpdates).length > 0) {
+        setWorkflowState(prev => {
+          const newState = { ...prev, ...stateUpdates };
+          newState.currentPhase = determinePhase(newState);
+          return newState;
+        });
+      }
+
       // Check for resume data in response
       const resume = extractResumeData(assistantContent);
       if (resume) {
         setResumeData(resume);
+        setWorkflowState(prev => ({ ...prev, currentPhase: "complete" }));
       }
 
-      // Play audio response (without JSON blocks)
-      const textToSpeak = assistantContent.replace(/```json[\s\S]*?```/g, "").trim();
+      // Play audio response (without JSON blocks and state updates)
+      const textToSpeak = cleanResponse(assistantContent)
+        .replace(/```json[\s\S]*?```/g, "")
+        .trim();
       if (textToSpeak) {
         await playAudio(textToSpeak);
       }
@@ -151,7 +241,7 @@ export function useVoiceChat() {
     } finally {
       setIsLoading(false);
     }
-  }, [messages, playAudio, extractResumeData]);
+  }, [messages, playAudio, extractResumeData, workflowState]);
 
   const startRecording = useCallback(async () => {
     try {
@@ -170,7 +260,6 @@ export function useVoiceChat() {
         const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
         stream.getTracks().forEach(track => track.stop());
         
-        // Transcribe audio
         try {
           const formData = new FormData();
           formData.append("audio", audioBlob, "recording.webm");
@@ -229,9 +318,17 @@ export function useVoiceChat() {
   }, []);
 
   const startConversation = useCallback(async () => {
+    // Reset state for new conversation
+    setWorkflowState({
+      ...INITIAL_WORKFLOW_STATE,
+      currentPhase: "goal_clarification",
+      currentAgent: "goal_clarifier"
+    });
+    setCurrentAgent("goal_clarifier");
+    
     // Start with AI greeting
-    const greeting = "你好！我是职途的AI简历顾问。很高兴能帮助你梳理职业经历，打造一份出色的简历。首先，请告诉我你的名字，以及你想要应聘什么类型的职位？";
-    setMessages([{ role: "assistant", content: greeting }]);
+    const greeting = "你好！我是职途的目标顾问。在开始优化简历之前，让我先了解一下你的职业目标。请问你想要应聘什么职位？";
+    setMessages([{ role: "assistant", content: greeting, agent: "goal_clarifier" }]);
     await playAudio(greeting);
   }, [playAudio]);
 
@@ -241,6 +338,8 @@ export function useVoiceChat() {
     isRecording,
     isSpeaking,
     resumeData,
+    workflowState,
+    currentAgent,
     startRecording,
     stopRecording,
     stopSpeaking,

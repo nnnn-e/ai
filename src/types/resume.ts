@@ -24,4 +24,6 @@ export interface ResumeData {
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+  agent?: string;
+  isIntegrityWarning?: boolean;
 }

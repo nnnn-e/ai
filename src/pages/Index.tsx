@@ -4,6 +4,7 @@ import { MicrophoneButton } from "@/components/MicrophoneButton";
 import { ChatMessages } from "@/components/ChatMessages";
 import { ChatInput } from "@/components/ChatInput";
 import { ResumePreview } from "@/components/ResumePreview";
+import { WorkflowProgress } from "@/components/WorkflowProgress";
 import { toast } from "@/hooks/use-toast";
 import html2pdf from "html2pdf.js";
 
@@ -14,6 +15,8 @@ const Index = () => {
     isRecording,
     isSpeaking,
     resumeData,
+    workflowState,
+    currentAgent,
     startRecording,
     stopRecording,
     stopSpeaking,
@@ -103,9 +106,15 @@ const Index = () => {
   // Chat interface
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* Header */}
-      <div className="px-6 py-4">
-        <h1 className="text-lg font-light tracking-wide">职途</h1>
+      {/* Header with progress */}
+      <div className="px-6 py-4 border-b border-border">
+        <div className="flex items-center justify-between mb-2">
+          <h1 className="text-lg font-light tracking-wide">职途</h1>
+        </div>
+        <WorkflowProgress 
+          currentPhase={workflowState.currentPhase} 
+          currentAgent={currentAgent}
+        />
       </div>
 
       {/* Messages */}
