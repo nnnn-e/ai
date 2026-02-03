@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useVoiceChat } from "@/hooks/useVoiceChat";
 import { MicrophoneButton } from "@/components/MicrophoneButton";
 import { ChatMessages } from "@/components/ChatMessages";
+import { ChatInput } from "@/components/ChatInput";
 import { ResumePreview } from "@/components/ResumePreview";
 import { toast } from "@/hooks/use-toast";
 import html2pdf from "html2pdf.js";
@@ -16,6 +17,7 @@ const Index = () => {
     startRecording,
     stopRecording,
     stopSpeaking,
+    streamChat,
     startConversation,
     setResumeData,
   } = useVoiceChat();
@@ -127,8 +129,11 @@ const Index = () => {
         </div>
       )}
 
+      {/* Text input */}
+      <ChatInput onSend={streamChat} isLoading={isLoading} />
+
       {/* Microphone button */}
-      <div className="py-8 flex justify-center">
+      <div className="py-6 flex justify-center">
         <MicrophoneButton
           isRecording={isRecording}
           isSpeaking={isSpeaking}
@@ -140,7 +145,7 @@ const Index = () => {
       </div>
 
       {/* Help text */}
-      <div className="text-center pb-6">
+      <div className="text-center pb-4">
         <p className="text-xs text-muted-foreground">
           {isSpeaking
             ? "点击停止播放"
