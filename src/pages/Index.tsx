@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useVoiceChat } from "@/hooks/useVoiceChat";
-import { MicrophoneButton } from "@/components/MicrophoneButton";
 import { ChatMessages } from "@/components/ChatMessages";
 import { ChatInput } from "@/components/ChatInput";
 import { ResumePanel } from "@/components/ResumePanel";
@@ -134,17 +133,8 @@ const Index = () => {
             {/* Messages */}
             <ChatMessages messages={messages} />
 
-            {/* Recording indicator */}
-            {isRecording && (
-              <div className="text-center py-2">
-                <span className="text-sm text-muted-foreground animate-pulse">
-                  正在聆听...
-                </span>
-              </div>
-            )}
-
             {/* Loading indicator */}
-            {isLoading && !isRecording && (
+            {isLoading && (
               <div className="text-center py-2">
                 <span className="text-sm text-muted-foreground">
                   思考中...
@@ -154,29 +144,6 @@ const Index = () => {
 
             {/* Text input */}
             <ChatInput onSend={streamChat} isLoading={isLoading} />
-
-            {/* Microphone button */}
-            <div className="py-4 flex justify-center">
-              <MicrophoneButton
-                isRecording={isRecording}
-                isSpeaking={isSpeaking}
-                isLoading={isLoading}
-                onStartRecording={startRecording}
-                onStopRecording={stopRecording}
-                onStopSpeaking={stopSpeaking}
-              />
-            </div>
-
-            {/* Help text */}
-            <div className="text-center pb-4">
-              <p className="text-xs text-muted-foreground">
-                {isSpeaking
-                  ? "点击停止播放"
-                  : isRecording
-                  ? "点击停止录音"
-                  : "点击麦克风开始说话"}
-              </p>
-            </div>
           </>
         ) : (
           <div className="flex-1">
@@ -209,17 +176,8 @@ const Index = () => {
             {/* Messages */}
             <ChatMessages messages={messages} />
 
-            {/* Recording indicator */}
-            {isRecording && (
-              <div className="text-center py-2">
-                <span className="text-sm text-muted-foreground animate-pulse">
-                  正在聆听...
-                </span>
-              </div>
-            )}
-
             {/* Loading indicator */}
-            {isLoading && !isRecording && (
+            {isLoading && (
               <div className="text-center py-2">
                 <span className="text-sm text-muted-foreground">
                   思考中...
@@ -229,29 +187,6 @@ const Index = () => {
 
             {/* Text input */}
             <ChatInput onSend={streamChat} isLoading={isLoading} />
-
-            {/* Microphone button */}
-            <div className="py-4 flex justify-center">
-              <MicrophoneButton
-                isRecording={isRecording}
-                isSpeaking={isSpeaking}
-                isLoading={isLoading}
-                onStartRecording={startRecording}
-                onStopRecording={stopRecording}
-                onStopSpeaking={stopSpeaking}
-              />
-            </div>
-
-            {/* Help text */}
-            <div className="text-center pb-4">
-              <p className="text-xs text-muted-foreground">
-                {isSpeaking
-                  ? "点击停止播放"
-                  : isRecording
-                  ? "点击停止录音"
-                  : "点击麦克风开始说话"}
-              </p>
-            </div>
           </div>
         </ResizablePanel>
 
