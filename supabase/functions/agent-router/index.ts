@@ -29,35 +29,17 @@ const AGENT_PROMPTS = {
   "reasoning": "路由原因"
 }`,
 
-  goal_clarifier: `你是「目标顾问」，专门帮助用户明确职业目标和简历策略。
+  goal_clarifier: `你是目标顾问，帮助用户明确职业目标。
 
-你的任务：
-1. 了解用户想要应聘的具体职位
-2. 了解目标市场（国家/城市/行业）
-3. 了解简历的主要目标（第一份工作/跳槽/转行/晋升）
+任务：依次了解用户的目标职位、目标市场（城市/行业）、简历目标（求职/跳槽/转行）。每次只问一个问题，用友好语气。
 
-对话规则：
-- 每次只问一个关键问题
-- 不要询问具体经历细节
-- 在答案明确前不允许生成简历
-- 用友好、鼓励的语气
+用户回答后，在回复末尾标注相应信息：
+- 目标岗位：[STATE_UPDATE: targetRole="岗位名称"]
+- 目标市场：[STATE_UPDATE: targetMarket="市场信息"]
+- 简历目标：[STATE_UPDATE: resumeGoal="目标类型"]
+- 三个都明确后：[STATE_UPDATE: goalConfirmed=true]
 
-当三个问题都明确回答后，总结用户的目标，并准备进入下一阶段。
-
-如果用户提供了简历内容（如工作经历描述），在回复中标注：
-[STATE_UPDATE: resumeProvided=true]
-
-如果用户明确了目标岗位，标注：
-[STATE_UPDATE: targetRole="岗位名称"]
-
-如果用户明确了目标市场，标注：
-[STATE_UPDATE: targetMarket="市场信息"]
-
-如果用户明确了简历目标，标注：
-[STATE_UPDATE: resumeGoal="目标类型"]
-
-当三个目标都明确后，标注：
-[STATE_UPDATE: goalConfirmed=true]`,
+回复要简短，不超过50字。`,
 
   recruiter_judge: `你是「招聘官视角」，一位资深招聘经理，负责模拟 10 秒简历筛选。
 
@@ -316,42 +298,57 @@ serve(async (req) => {
       ? `${systemPrompt}\n\n当前上下文：\n${contextMessage}`
       : systemPrompt;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          { role: "system", content: fullSystemPrompt },
-          ...messages,
-        ],
-        stream: true,
-      }),
-    });
+    console.log("Calling AI gateway with agent:", currentAgent);
+    console.log("Message count:", messages.length);
 
-    if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "请求过于频繁，请稍后再试" }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "服务额度已用完" }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
-      return new Response(JSON.stringify({ error: "AI服务暂时不可用" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+    // Use AbortController for timeout handling
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      console.log("Request timed out after 25 seconds");
+      controller.abort();
+    }, 25000); // 25 second timeout
+
+    try {
+      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash-lite",
+          messages: [
+            { role: "system", content: fullSystemPrompt },
+            ...messages,
+          ],
+          stream: true,
+        }),
+        signal: controller.signal,
       });
-    }
+
+      clearTimeout(timeoutId);
+      console.log("AI gateway response status:", response.status);
+
+      if (!response.ok) {
+        if (response.status === 429) {
+          return new Response(JSON.stringify({ error: "请求过于频繁，请稍后再试" }), {
+            status: 429,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        if (response.status === 402) {
+          return new Response(JSON.stringify({ error: "服务额度已用完" }), {
+            status: 402,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        const errorText = await response.text();
+        console.error("AI gateway error:", response.status, errorText);
+        return new Response(JSON.stringify({ error: "AI服务暂时不可用" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
 
     // Create a transform stream to inject agent info and process state updates
     const encoder = new TextEncoder();
@@ -392,6 +389,14 @@ serve(async (req) => {
     return new Response(readable, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      console.error("AI fetch error:", fetchError);
+      return new Response(JSON.stringify({ error: "AI请求超时，请重试" }), {
+        status: 504,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
   } catch (error) {
     console.error("Agent router error:", error);
     return new Response(
