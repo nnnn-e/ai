@@ -1,13 +1,26 @@
 import { PHASE_DISPLAY_INFO, type WorkflowPhase, type AgentType } from "@/types/agents";
+import type { ResumeMode } from "@/types/resume";
 import { cn } from "@/lib/utils";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 
 interface WorkflowProgressProps {
   currentPhase: WorkflowPhase;
   currentAgent: AgentType | null;
+  mode?: ResumeMode;
 }
 
-const PHASES_ORDER: WorkflowPhase[] = [
+// Generate mode phases
+const GENERATE_PHASES_ORDER: WorkflowPhase[] = [
+  "idle",
+  "goal_clarification",
+  "experience_elicitation",
+  "resume_drafting",
+  "quality_review",
+  "complete",
+];
+
+// Optimize mode phases (existing)
+const OPTIMIZE_PHASES_ORDER: WorkflowPhase[] = [
   "idle",
   "goal_clarification",
   "recruiter_review",
@@ -17,13 +30,17 @@ const PHASES_ORDER: WorkflowPhase[] = [
   "complete",
 ];
 
-export function WorkflowProgress({ currentPhase }: WorkflowProgressProps) {
-  const currentIndex = PHASES_ORDER.indexOf(currentPhase);
+export function WorkflowProgress({ currentPhase, currentAgent, mode = "generate" }: WorkflowProgressProps) {
+  const phasesOrder = mode === "generate" || mode === "hybrid" 
+    ? GENERATE_PHASES_ORDER 
+    : OPTIMIZE_PHASES_ORDER;
+    
+  const currentIndex = phasesOrder.indexOf(currentPhase);
 
   return (
     <ScrollArea className="w-full">
       <div className="flex items-center gap-2 pb-2">
-        {PHASES_ORDER.map((phase, index) => {
+        {phasesOrder.map((phase, index) => {
           const phaseInfo = PHASE_DISPLAY_INFO[phase];
           const isCompleted = index < currentIndex;
           const isCurrent = index === currentIndex;
@@ -50,12 +67,12 @@ export function WorkflowProgress({ currentPhase }: WorkflowProgressProps) {
                     !isCurrent && "text-muted-foreground"
                   )}
                 >
-                  {phaseInfo.label}
+                  {phaseInfo?.label || phase}
                 </span>
               </div>
 
               {/* Connector line */}
-              {index < PHASES_ORDER.length - 1 && (
+              {index < phasesOrder.length - 1 && (
                 <div
                   className={cn(
                     "w-8 h-0.5 mx-2",
