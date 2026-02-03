@@ -73,37 +73,59 @@ export function useVoiceChat() {
 
   // Internal recording function that doesn't depend on streamChat
   const startRecordingInternal = useCallback(async () => {
-    console.log("Starting recording...");
+    console.log("[Voice] Starting recording...");
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        }
+      });
+      
+      // Try to use a more compatible format
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') 
+        ? 'audio/webm;codecs=opus' 
+        : MediaRecorder.isTypeSupported('audio/webm')
+        ? 'audio/webm'
+        : 'audio/mp4';
+      
+      console.log("[Voice] Using MIME type:", mimeType);
+      
+      const mediaRecorder = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
       mediaRecorder.ondataavailable = (event) => {
-        console.log("Audio data available:", event.data.size);
+        console.log("[Voice] Audio chunk received:", event.data.size, "bytes");
         if (event.data.size > 0) {
           audioChunksRef.current.push(event.data);
         }
       };
 
       mediaRecorder.onstop = async () => {
-        console.log("Recording stopped, processing audio...");
-        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-        console.log("Audio blob size:", audioBlob.size);
+        console.log("[Voice] Recording stopped, total chunks:", audioChunksRef.current.length);
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+        console.log("[Voice] Audio blob size:", audioBlob.size, "bytes");
         stream.getTracks().forEach(track => track.stop());
         
         // Don't process if audio is too short (less than 1KB)
         if (audioBlob.size < 1000) {
-          console.log("Audio too short, skipping STT");
+          console.log("[Voice] Audio too short, skipping STT");
+          toast({
+            title: "录音太短",
+            description: "请说话后再停止录音",
+          });
           return;
         }
         
         try {
           const formData = new FormData();
-          formData.append("audio", audioBlob, "recording.webm");
+          // Use appropriate file extension based on mime type
+          const extension = mimeType.includes('mp4') ? 'mp4' : 'webm';
+          formData.append("audio", audioBlob, `recording.${extension}`);
 
-          console.log("Sending audio to STT...");
+          console.log("[Voice] Sending audio to STT...");
           const response = await fetch(STT_URL, {
             method: "POST",
             headers: {
@@ -112,24 +134,36 @@ export function useVoiceChat() {
             body: formData,
           });
 
+          const responseText = await response.text();
+          console.log("[Voice] STT response status:", response.status);
+          console.log("[Voice] STT response:", responseText);
+
           if (!response.ok) {
-            const errorText = await response.text();
-            console.error("STT response error:", response.status, errorText);
+            console.error("[Voice] STT response error:", response.status, responseText);
             throw new Error("STT request failed");
           }
 
-          const data = await response.json();
-          console.log("STT result:", data);
-          if (data.text && streamChatRef.current) {
+          const data = JSON.parse(responseText);
+          console.log("[Voice] STT result:", data);
+          
+          if (data.text && data.text.trim() && streamChatRef.current) {
+            console.log("[Voice] Sending text to chat:", data.text);
             await streamChatRef.current(data.text);
-          } else if (!data.text) {
+          } else if (data.error) {
+            console.error("[Voice] STT error:", data.error);
+            toast({
+              variant: "destructive",
+              title: "语音识别失败",
+              description: data.error,
+            });
+          } else {
             toast({
               title: "未检测到语音",
               description: "请说话后再点击麦克风",
             });
           }
         } catch (error) {
-          console.error("STT error:", error);
+          console.error("[Voice] STT error:", error);
           toast({
             variant: "destructive",
             title: "语音识别失败",
@@ -138,10 +172,12 @@ export function useVoiceChat() {
         }
       };
 
-      mediaRecorder.start();
+      // Start recording with timeslice to get data periodically
+      mediaRecorder.start(1000); // Get data every 1 second
       setIsRecording(true);
+      console.log("[Voice] Recording started");
     } catch (error) {
-      console.error("Recording error:", error);
+      console.error("[Voice] Recording error:", error);
       toast({
         variant: "destructive",
         title: "无法访问麦克风",
