@@ -154,52 +154,42 @@ const Index = () => {
     );
   }
 
-  // Desktop: Split layout with resizable panels
+  // Desktop: Split layout
   return (
-    <div className="h-screen bg-background flex flex-col">
-      {/* Header with progress */}
-      <div className="px-6 py-4">
-        <div className="flex items-center justify-between mb-2">
-          <h1 className="text-lg font-light tracking-wide">职途</h1>
+    <div className="h-screen bg-background flex">
+      {/* Left: Header + Chat */}
+      <div className="flex-1 flex flex-col">
+        {/* Header with progress */}
+        <div className="px-6 py-4">
+          <div className="flex items-center justify-between mb-2">
+            <h1 className="text-lg font-light tracking-wide">职途</h1>
+          </div>
+          <WorkflowProgress 
+            currentPhase={workflowState.currentPhase} 
+            currentAgent={currentAgent}
+          />
         </div>
-        <WorkflowProgress 
-          currentPhase={workflowState.currentPhase} 
-          currentAgent={currentAgent}
-        />
+
+        {/* Messages */}
+        <ChatMessages messages={messages} />
+
+        {/* Loading indicator */}
+        {isLoading && (
+          <div className="text-center py-2">
+            <span className="text-sm text-muted-foreground">
+              思考中...
+            </span>
+          </div>
+        )}
+
+        {/* Text input */}
+        <ChatInput onSend={streamChat} isLoading={isLoading} />
       </div>
 
-      {/* Main content with resizable panels */}
-      <ResizablePanelGroup direction="horizontal" className="flex-1">
-        {/* Left Panel: Chat */}
-        <ResizablePanel defaultSize={50} minSize={30}>
-          <div className="h-full flex flex-col">
-            {/* Messages */}
-            <ChatMessages messages={messages} />
-
-            {/* Loading indicator */}
-            {isLoading && (
-              <div className="text-center py-2">
-                <span className="text-sm text-muted-foreground">
-                  思考中...
-                </span>
-              </div>
-            )}
-
-            {/* Text input */}
-            <ChatInput onSend={streamChat} isLoading={isLoading} />
-          </div>
-        </ResizablePanel>
-
-        {/* Spacer */}
-        <div className="w-2" />
-
-        {/* Right Panel: Resume Preview */}
-        <ResizablePanel defaultSize={50} minSize={25}>
-          <div className="h-full m-4 rounded-xl bg-card overflow-hidden">
-            <ResumePanel resume={resumeData} onExport={handleExportPDF} />
-          </div>
-        </ResizablePanel>
-      </ResizablePanelGroup>
+      {/* Right: Resume Preview */}
+      <div className="w-1/2 m-4 rounded-xl bg-card overflow-hidden">
+        <ResumePanel resume={resumeData} onExport={handleExportPDF} />
+      </div>
     </div>
   );
 };
