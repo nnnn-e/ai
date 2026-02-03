@@ -3,24 +3,20 @@ import { useVoiceChat } from "@/hooks/useVoiceChat";
 import { ChatMessages } from "@/components/ChatMessages";
 import { ChatInput } from "@/components/ChatInput";
 import { ResumePanel } from "@/components/ResumePanel";
-import { ResumePreview } from "@/components/ResumePreview";
 import { WorkflowProgress } from "@/components/WorkflowProgress";
 import { toast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
-import {
-  ResizablePanelGroup,
-  ResizablePanel,
-  ResizableHandle,
-} from "@/components/ui/resizable";
 import { Button } from "@/components/ui/button";
-import { FileText, MessageSquare } from "lucide-react";
+import { FileText, MessageSquare, Sparkles, Upload } from "lucide-react";
 import html2pdf from "html2pdf.js";
+import type { ResumeMode } from "@/types/resume";
 
 const Index = () => {
   const {
     messages,
     isLoading,
     resumeData,
+    fullResumeData,
     workflowState,
     currentAgent,
     streamChat,
@@ -32,9 +28,9 @@ const Index = () => {
   const [mobileView, setMobileView] = useState<"chat" | "resume">("chat");
   const isMobile = useIsMobile();
 
-  const handleStart = async () => {
+  const handleStart = async (mode: ResumeMode = "generate") => {
     setHasStarted(true);
-    await startConversation();
+    await startConversation(mode);
   };
 
   const handleExportPDF = async () => {
@@ -67,7 +63,7 @@ const Index = () => {
     }
   };
 
-  // Landing page
+  // Landing page with mode selection
   if (!hasStarted) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6">
@@ -76,14 +72,27 @@ const Index = () => {
           <p className="text-muted-foreground mb-12">
             AI简历优化大师
           </p>
-          <button
-            onClick={handleStart}
-            className="bg-foreground text-background px-8 py-3 text-sm tracking-wide hover:opacity-80 transition-opacity"
-          >
-            开始对话
-          </button>
-          <p className="text-xs text-muted-foreground mt-8">
-            通过语音对话，让AI帮你梳理职业经历
+          
+          {/* Mode selection buttons */}
+          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">
+            <button
+              onClick={() => handleStart("generate")}
+              className="flex items-center justify-center gap-2 bg-foreground text-background px-6 py-3 text-sm tracking-wide hover:opacity-80 transition-opacity"
+            >
+              <Sparkles className="w-4 h-4" />
+              从零开始写简历
+            </button>
+            <button
+              onClick={() => handleStart("optimize")}
+              className="flex items-center justify-center gap-2 border border-foreground text-foreground px-6 py-3 text-sm tracking-wide hover:bg-foreground/5 transition-colors"
+            >
+              <Upload className="w-4 h-4" />
+              优化现有简历
+            </button>
+          </div>
+          
+          <p className="text-xs text-muted-foreground">
+            通过对话，让AI帮你梳理职业经历，生成专业简历
           </p>
         </div>
       </div>
@@ -120,6 +129,7 @@ const Index = () => {
           <WorkflowProgress 
             currentPhase={workflowState.currentPhase} 
             currentAgent={currentAgent}
+            mode={workflowState.mode}
           />
         </div>
 
@@ -142,7 +152,12 @@ const Index = () => {
           </>
         ) : (
           <div className="flex-1">
-            <ResumePanel resume={resumeData} onExport={handleExportPDF} />
+            <ResumePanel 
+              resume={resumeData} 
+              fullResume={fullResumeData}
+              factReadiness={workflowState.factReadiness}
+              onExport={handleExportPDF} 
+            />
           </div>
         )}
       </div>
@@ -162,6 +177,7 @@ const Index = () => {
           <WorkflowProgress 
             currentPhase={workflowState.currentPhase} 
             currentAgent={currentAgent}
+            mode={workflowState.mode}
           />
         </div>
 
@@ -183,7 +199,12 @@ const Index = () => {
 
       {/* Right: Resume Preview */}
       <div className="flex-1 m-4 rounded-xl bg-card overflow-hidden">
-        <ResumePanel resume={resumeData} onExport={handleExportPDF} />
+        <ResumePanel 
+          resume={resumeData} 
+          fullResume={fullResumeData}
+          factReadiness={workflowState.factReadiness}
+          onExport={handleExportPDF} 
+        />
       </div>
     </div>
   );
