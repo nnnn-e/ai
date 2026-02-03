@@ -195,7 +195,7 @@ const Index = () => {
 
         {/* Right Panel: Resume Preview */}
         <ResizablePanel defaultSize={50} minSize={25}>
-          <div className="h-full border-l border-border bg-card">
+          <div className="h-full m-4 rounded-xl bg-card overflow-hidden">
             <ResumePanel resume={resumeData} onExport={handleExportPDF} />
           </div>
         </ResizablePanel>

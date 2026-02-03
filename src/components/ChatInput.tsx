@@ -18,14 +18,14 @@ export function ChatInput({ onSend, isLoading }: ChatInputProps) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex items-center gap-3 px-6">
+    <form onSubmit={handleSubmit} className="flex items-center gap-3 px-6 py-3 mx-4 mb-4 bg-white rounded-xl">
       <input
         type="text"
         value={input}
         onChange={(e) => setInput(e.target.value)}
         placeholder="输入消息..."
         disabled={isLoading}
-        className="flex-1 bg-transparent text-sm py-3 outline-none placeholder:text-muted-foreground disabled:opacity-50"
+        className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground disabled:opacity-50"
       />
       <button
         type="submit"
