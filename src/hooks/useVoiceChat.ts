@@ -64,12 +64,74 @@ export function useVoiceChat() {
   const [resumeData, setResumeData] = useState<ResumeData | null>(null);
   const [workflowState, setWorkflowState] = useState<WorkflowState>(INITIAL_WORKFLOW_STATE);
   const [currentAgent, setCurrentAgent] = useState<AgentType | null>(null);
+  const [autoListenEnabled, setAutoListenEnabled] = useState(true);
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const streamChatRef = useRef<(message: string) => Promise<void>>();
 
-  const playAudio = useCallback(async (text: string) => {
+  // Internal recording function that doesn't depend on streamChat
+  const startRecordingInternal = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        stream.getTracks().forEach(track => track.stop());
+        
+        try {
+          const formData = new FormData();
+          formData.append("audio", audioBlob, "recording.webm");
+
+          const response = await fetch(STT_URL, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            },
+            body: formData,
+          });
+
+          if (!response.ok) {
+            throw new Error("STT request failed");
+          }
+
+          const data = await response.json();
+          if (data.text && streamChatRef.current) {
+            await streamChatRef.current(data.text);
+          }
+        } catch (error) {
+          console.error("STT error:", error);
+          toast({
+            variant: "destructive",
+            title: "语音识别失败",
+            description: "请稍后再试",
+          });
+        }
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (error) {
+      console.error("Recording error:", error);
+      toast({
+        variant: "destructive",
+        title: "无法访问麦克风",
+        description: "请允许麦克风访问权限",
+      });
+    }
+  }, []);
+
+  const playAudio = useCallback(async (text: string, autoListen: boolean = true) => {
     try {
       setIsSpeaking(true);
       const response = await fetch(TTS_URL, {
@@ -94,14 +156,23 @@ export function useVoiceChat() {
       
       const audio = new Audio(audioUrl);
       audioRef.current = audio;
-      audio.onended = () => setIsSpeaking(false);
+      
+      audio.onended = () => {
+        setIsSpeaking(false);
+        // Auto-start listening after AI finishes speaking
+        if (autoListen && autoListenEnabled) {
+          setTimeout(() => {
+            startRecordingInternal();
+          }, 500); // Small delay before auto-listening
+        }
+      };
       audio.onerror = () => setIsSpeaking(false);
       await audio.play();
     } catch (error) {
       console.error("TTS error:", error);
       setIsSpeaking(false);
     }
-  }, []);
+  }, [autoListenEnabled, startRecordingInternal]);
 
   const extractResumeData = useCallback((content: string): ResumeData | null => {
     const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/);
@@ -243,64 +314,11 @@ export function useVoiceChat() {
     }
   }, [messages, playAudio, extractResumeData, workflowState]);
 
-  const startRecording = useCallback(async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
+  // Keep streamChatRef updated
+  streamChatRef.current = streamChat;
 
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
-      };
-
-      mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-        stream.getTracks().forEach(track => track.stop());
-        
-        try {
-          const formData = new FormData();
-          formData.append("audio", audioBlob, "recording.webm");
-
-          const response = await fetch(STT_URL, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-            },
-            body: formData,
-          });
-
-          if (!response.ok) {
-            throw new Error("STT request failed");
-          }
-
-          const data = await response.json();
-          if (data.text) {
-            await streamChat(data.text);
-          }
-        } catch (error) {
-          console.error("STT error:", error);
-          toast({
-            variant: "destructive",
-            title: "语音识别失败",
-            description: "请稍后再试",
-          });
-        }
-      };
-
-      mediaRecorder.start();
-      setIsRecording(true);
-    } catch (error) {
-      console.error("Recording error:", error);
-      toast({
-        variant: "destructive",
-        title: "无法访问麦克风",
-        description: "请允许麦克风访问权限",
-      });
-    }
-  }, [streamChat]);
+  // Public startRecording just calls the internal one
+  const startRecording = startRecordingInternal;
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && isRecording) {
