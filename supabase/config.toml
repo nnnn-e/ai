@@ -1,1 +1,13 @@
 project_id = "aajgvrlqwdpjzhxembel"
+
+[functions.agent-router]
+verify_jwt = false
+
+[functions.elevenlabs-conversation-token]
+verify_jwt = false
+
+[functions.elevenlabs-tts]
+verify_jwt = false
+
+[functions.elevenlabs-stt]
+verify_jwt = false
