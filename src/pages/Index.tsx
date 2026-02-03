@@ -1,11 +1,20 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useVoiceChat } from "@/hooks/useVoiceChat";
 import { MicrophoneButton } from "@/components/MicrophoneButton";
 import { ChatMessages } from "@/components/ChatMessages";
 import { ChatInput } from "@/components/ChatInput";
+import { ResumePanel } from "@/components/ResumePanel";
 import { ResumePreview } from "@/components/ResumePreview";
 import { WorkflowProgress } from "@/components/WorkflowProgress";
 import { toast } from "@/hooks/use-toast";
+import { useIsMobile } from "@/hooks/use-mobile";
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from "@/components/ui/resizable";
+import { Button } from "@/components/ui/button";
+import { FileText, MessageSquare } from "lucide-react";
 import html2pdf from "html2pdf.js";
 
 const Index = () => {
@@ -25,14 +34,9 @@ const Index = () => {
     setResumeData,
   } = useVoiceChat();
 
-  const [showResume, setShowResume] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
-
-  useEffect(() => {
-    if (resumeData) {
-      setShowResume(true);
-    }
-  }, [resumeData]);
+  const [mobileView, setMobileView] = useState<"chat" | "resume">("chat");
+  const isMobile = useIsMobile();
 
   const handleStart = async () => {
     setHasStarted(true);
@@ -69,17 +73,6 @@ const Index = () => {
     }
   };
 
-  // Show resume preview
-  if (showResume && resumeData) {
-    return (
-      <ResumePreview
-        resume={resumeData}
-        onBack={() => setShowResume(false)}
-        onExport={handleExportPDF}
-      />
-    );
-  }
-
   // Landing page
   if (!hasStarted) {
     return (
@@ -103,9 +96,100 @@ const Index = () => {
     );
   }
 
-  // Chat interface
+  // Mobile: Show either chat or resume based on toggle
+  if (isMobile) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col">
+        {/* Header with progress */}
+        <div className="px-4 py-3 border-b border-border">
+          <div className="flex items-center justify-between mb-2">
+            <h1 className="text-lg font-light tracking-wide">职途</h1>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setMobileView(mobileView === "chat" ? "resume" : "chat")}
+              className="gap-2"
+            >
+              {mobileView === "chat" ? (
+                <>
+                  <FileText className="w-4 h-4" />
+                  查看简历
+                </>
+              ) : (
+                <>
+                  <MessageSquare className="w-4 h-4" />
+                  返回对话
+                </>
+              )}
+            </Button>
+          </div>
+          <WorkflowProgress 
+            currentPhase={workflowState.currentPhase} 
+            currentAgent={currentAgent}
+          />
+        </div>
+
+        {mobileView === "chat" ? (
+          <>
+            {/* Messages */}
+            <ChatMessages messages={messages} />
+
+            {/* Recording indicator */}
+            {isRecording && (
+              <div className="text-center py-2">
+                <span className="text-sm text-muted-foreground animate-pulse">
+                  正在聆听...
+                </span>
+              </div>
+            )}
+
+            {/* Loading indicator */}
+            {isLoading && !isRecording && (
+              <div className="text-center py-2">
+                <span className="text-sm text-muted-foreground">
+                  思考中...
+                </span>
+              </div>
+            )}
+
+            {/* Text input */}
+            <ChatInput onSend={streamChat} isLoading={isLoading} />
+
+            {/* Microphone button */}
+            <div className="py-4 flex justify-center">
+              <MicrophoneButton
+                isRecording={isRecording}
+                isSpeaking={isSpeaking}
+                isLoading={isLoading}
+                onStartRecording={startRecording}
+                onStopRecording={stopRecording}
+                onStopSpeaking={stopSpeaking}
+              />
+            </div>
+
+            {/* Help text */}
+            <div className="text-center pb-4">
+              <p className="text-xs text-muted-foreground">
+                {isSpeaking
+                  ? "点击停止播放"
+                  : isRecording
+                  ? "点击停止录音"
+                  : "点击麦克风开始说话"}
+              </p>
+            </div>
+          </>
+        ) : (
+          <div className="flex-1">
+            <ResumePanel resume={resumeData} onExport={handleExportPDF} />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Desktop: Split layout with resizable panels
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="h-screen bg-background flex flex-col">
       {/* Header with progress */}
       <div className="px-6 py-4 border-b border-border">
         <div className="flex items-center justify-between mb-2">
@@ -117,52 +201,70 @@ const Index = () => {
         />
       </div>
 
-      {/* Messages */}
-      <ChatMessages messages={messages} />
+      {/* Main content with resizable panels */}
+      <ResizablePanelGroup direction="horizontal" className="flex-1">
+        {/* Left Panel: Chat */}
+        <ResizablePanel defaultSize={50} minSize={30}>
+          <div className="h-full flex flex-col">
+            {/* Messages */}
+            <ChatMessages messages={messages} />
 
-      {/* Recording indicator */}
-      {isRecording && (
-        <div className="text-center py-2">
-          <span className="text-sm text-muted-foreground animate-pulse">
-            正在聆听...
-          </span>
-        </div>
-      )}
+            {/* Recording indicator */}
+            {isRecording && (
+              <div className="text-center py-2">
+                <span className="text-sm text-muted-foreground animate-pulse">
+                  正在聆听...
+                </span>
+              </div>
+            )}
 
-      {/* Loading indicator */}
-      {isLoading && !isRecording && (
-        <div className="text-center py-2">
-          <span className="text-sm text-muted-foreground">
-            思考中...
-          </span>
-        </div>
-      )}
+            {/* Loading indicator */}
+            {isLoading && !isRecording && (
+              <div className="text-center py-2">
+                <span className="text-sm text-muted-foreground">
+                  思考中...
+                </span>
+              </div>
+            )}
 
-      {/* Text input */}
-      <ChatInput onSend={streamChat} isLoading={isLoading} />
+            {/* Text input */}
+            <ChatInput onSend={streamChat} isLoading={isLoading} />
 
-      {/* Microphone button */}
-      <div className="py-6 flex justify-center">
-        <MicrophoneButton
-          isRecording={isRecording}
-          isSpeaking={isSpeaking}
-          isLoading={isLoading}
-          onStartRecording={startRecording}
-          onStopRecording={stopRecording}
-          onStopSpeaking={stopSpeaking}
-        />
-      </div>
+            {/* Microphone button */}
+            <div className="py-4 flex justify-center">
+              <MicrophoneButton
+                isRecording={isRecording}
+                isSpeaking={isSpeaking}
+                isLoading={isLoading}
+                onStartRecording={startRecording}
+                onStopRecording={stopRecording}
+                onStopSpeaking={stopSpeaking}
+              />
+            </div>
 
-      {/* Help text */}
-      <div className="text-center pb-4">
-        <p className="text-xs text-muted-foreground">
-          {isSpeaking
-            ? "点击停止播放"
-            : isRecording
-            ? "点击停止录音"
-            : "点击麦克风开始说话"}
-        </p>
-      </div>
+            {/* Help text */}
+            <div className="text-center pb-4">
+              <p className="text-xs text-muted-foreground">
+                {isSpeaking
+                  ? "点击停止播放"
+                  : isRecording
+                  ? "点击停止录音"
+                  : "点击麦克风开始说话"}
+              </p>
+            </div>
+          </div>
+        </ResizablePanel>
+
+        {/* Resize Handle */}
+        <ResizableHandle withHandle />
+
+        {/* Right Panel: Resume Preview */}
+        <ResizablePanel defaultSize={50} minSize={25}>
+          <div className="h-full border-l border-border bg-card">
+            <ResumePanel resume={resumeData} onExport={handleExportPDF} />
+          </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
   );
 };
