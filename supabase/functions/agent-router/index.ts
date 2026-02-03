@@ -2,11 +2,33 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
 // Agent System Prompts
 const AGENT_PROMPTS = {
+  orchestrator: `你是 OrchestratorAgent（调度中枢）。
+
+职责：
+- 检测用户模式（引导式构建 vs 简历优化）
+- 将用户输入路由到正确的 Agent
+- 确保工作流步骤不被跳过
+- 在确认前阻止最终简历生成
+
+路由规则：
+- 用户未提供简历 → 路由到 GoalClarifierAgent
+- 用户提供了简历内容 → 路由到 RecruiterJudgeAgent
+
+约束：
+- 永远不生成简历内容
+- 永远不向用户暴露内部 Agent 逻辑
+
+输出格式（JSON）：
+{
+  "next_agent": "goal_clarifier" | "recruiter_judge" | "diagnostician" | "rewriter",
+  "reasoning": "路由原因"
+}`,
+
   goal_clarifier: `你是目标顾问，帮助用户明确职业目标。
 
 任务：依次了解用户的目标职位、目标市场（城市/行业）、简历目标（求职/跳槽/转行）。每次只问一个问题，用友好语气。
@@ -105,7 +127,32 @@ const AGENT_PROMPTS = {
   ],
   "skills": ["技能1", "技能2"]
 }
-\`\`\``
+\`\`\``,
+
+  integrity_guard: `你是 IntegrityGuardAgent（诚信守护），负责监控伦理和真实性。
+
+监控范围：
+- 编造的工作经历
+- 虚构的指标数据
+- 要求误导性夸大的请求
+
+干预策略：
+- 立即中断生成
+- 解释为什么该请求有害
+- 引导用户回到真实优化路径
+
+输出格式（仅在检测到问题时）：
+{
+  "violation_detected": true,
+  "violation_type": "fabrication" | "invented_metrics" | "misleading_exaggeration",
+  "explanation": "解释",
+  "redirect_message": "引导消息"
+}
+
+如果没有检测到问题：
+{
+  "violation_detected": false
+}`
 };
 
 // Determine which agent to route to based on workflow state
@@ -129,6 +176,84 @@ function determineNextAgent(workflowState: any, hasResume: boolean): string {
   return "diagnostician";
 }
 
+// Parse state updates from agent response
+function parseStateUpdates(content: string): Record<string, any> {
+  const updates: Record<string, any> = {};
+  const stateUpdateRegex = /\[STATE_UPDATE:\s*([^\]]+)\]/g;
+  let match;
+  
+  while ((match = stateUpdateRegex.exec(content)) !== null) {
+    const updateStr = match[1];
+    // Parse key=value pairs
+    const keyValueMatch = updateStr.match(/(\w+)=(.+)/);
+    if (keyValueMatch) {
+      const key = keyValueMatch[1];
+      const rawValue = keyValueMatch[2].trim();
+      let value: any = rawValue;
+      
+      // Try to parse as JSON if it looks like an object
+      if (rawValue.startsWith('{') || rawValue.startsWith('[')) {
+        try {
+          value = JSON.parse(rawValue);
+        } catch {
+          // Keep as string if parsing fails
+        }
+      } else if (rawValue === 'true') {
+        value = true;
+      } else if (rawValue === 'false') {
+        value = false;
+      } else if (rawValue.startsWith('"') && rawValue.endsWith('"')) {
+        value = rawValue.slice(1, -1);
+      }
+      
+      updates[key] = value;
+    }
+  }
+  
+  return updates;
+}
+
+// Clean response by removing state update tags
+function cleanResponse(content: string): string {
+  return content.replace(/\[STATE_UPDATE:[^\]]+\]/g, '').trim();
+}
+
+// Check content with integrity guard
+async function checkIntegrity(content: string, DEEPSEEK_API_KEY: string): Promise<any> {
+  const response = await fetch("https://api.deepseek.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "deepseek-chat",
+      messages: [
+        { role: "system", content: AGENT_PROMPTS.integrity_guard },
+        { role: "user", content: `检查以下内容是否存在诚信问题：\n\n${content}` },
+      ],
+    }),
+  });
+  
+  if (!response.ok) {
+    return { violation_detected: false };
+  }
+  
+  const data = await response.json();
+  const responseContent = data.choices?.[0]?.message?.content || '';
+  
+  try {
+    const jsonMatch = responseContent.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
+    }
+  } catch {
+    // Ignore parsing errors
+  }
+  
+  return { violation_detected: false };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -136,14 +261,10 @@ serve(async (req) => {
 
   try {
     const { messages, workflowState } = await req.json();
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const DEEPSEEK_API_KEY = Deno.env.get("DEEPSEEK_API_KEY");
     
-    if (!LOVABLE_API_KEY) {
-      console.error("LOVABLE_API_KEY is not configured");
-      return new Response(JSON.stringify({ error: "AI服务未配置" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (!DEEPSEEK_API_KEY) {
+      throw new Error("DEEPSEEK_API_KEY is not configured");
     }
 
     // Check if user provided resume content
@@ -177,50 +298,61 @@ serve(async (req) => {
       ? `${systemPrompt}\n\n当前上下文：\n${contextMessage}`
       : systemPrompt;
 
-    console.log("Calling Lovable AI with agent:", currentAgent);
+    console.log("Calling AI gateway with agent:", currentAgent);
     console.log("Message count:", messages.length);
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: fullSystemPrompt },
-          ...messages,
-        ],
-        stream: true,
-      }),
-    });
+    // Use AbortController for timeout handling
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      console.log("Request timed out after 25 seconds");
+      controller.abort();
+    }, 25000); // 25 second timeout
 
-    console.log("Lovable AI response status:", response.status);
-
-    if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "请求过于频繁，请稍后再试" }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "服务额度已用完" }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      const errorText = await response.text();
-      console.error("Lovable AI error:", response.status, errorText);
-      return new Response(JSON.stringify({ error: "AI服务暂时不可用" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+    try {
+      const response = await fetch("https://api.deepseek.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "deepseek-chat",
+          messages: [
+            { role: "system", content: fullSystemPrompt },
+            ...messages,
+          ],
+          stream: true,
+        }),
+        signal: controller.signal,
       });
-    }
 
-    // Create a transform stream to inject agent info
+      clearTimeout(timeoutId);
+      console.log("AI gateway response status:", response.status);
+
+      if (!response.ok) {
+        if (response.status === 429) {
+          return new Response(JSON.stringify({ error: "请求过于频繁，请稍后再试" }), {
+            status: 429,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        if (response.status === 402) {
+          return new Response(JSON.stringify({ error: "服务额度已用完" }), {
+            status: 402,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        const errorText = await response.text();
+        console.error("AI gateway error:", response.status, errorText);
+        return new Response(JSON.stringify({ error: "AI服务暂时不可用" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+    // Create a transform stream to inject agent info and process state updates
     const encoder = new TextEncoder();
+    const decoder = new TextDecoder();
     
     // Send agent info as first event
     const agentInfoEvent = `data: ${JSON.stringify({
@@ -249,8 +381,6 @@ serve(async (req) => {
           if (done) break;
           await writer.write(value);
         }
-      } catch (err) {
-        console.error("Stream error:", err);
       } finally {
         await writer.close();
       }
@@ -259,6 +389,14 @@ serve(async (req) => {
     return new Response(readable, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      console.error("AI fetch error:", fetchError);
+      return new Response(JSON.stringify({ error: "AI请求超时，请重试" }), {
+        status: 504,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
   } catch (error) {
     console.error("Agent router error:", error);
     return new Response(
