@@ -1,12 +1,10 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { toast } from "@/hooks/use-toast";
 import type { ChatMessage, ResumeData } from "@/types/resume";
 import type { WorkflowState, AgentType } from "@/types/agents";
 import { INITIAL_WORKFLOW_STATE } from "@/types/agents";
 
 const AGENT_ROUTER_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/agent-router`;
-const TTS_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`;
-const STT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-stt`;
 
 // Parse state updates from agent response
 function parseStateUpdates(content: string): Partial<WorkflowState> {
@@ -59,175 +57,9 @@ function determinePhase(state: WorkflowState): WorkflowState["currentPhase"] {
 export function useVoiceChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
   const [resumeData, setResumeData] = useState<ResumeData | null>(null);
   const [workflowState, setWorkflowState] = useState<WorkflowState>(INITIAL_WORKFLOW_STATE);
   const [currentAgent, setCurrentAgent] = useState<AgentType | null>(null);
-  const [autoListenEnabled, setAutoListenEnabled] = useState(true);
-  
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const streamChatRef = useRef<(message: string) => Promise<void>>();
-
-  // Internal recording function that doesn't depend on streamChat
-  const startRecordingInternal = useCallback(async () => {
-    console.log("[Voice] Starting recording...");
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        }
-      });
-      
-      // Try to use a more compatible format
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') 
-        ? 'audio/webm;codecs=opus' 
-        : MediaRecorder.isTypeSupported('audio/webm')
-        ? 'audio/webm'
-        : 'audio/mp4';
-      
-      console.log("[Voice] Using MIME type:", mimeType);
-      
-      const mediaRecorder = new MediaRecorder(stream, { mimeType });
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (event) => {
-        console.log("[Voice] Audio chunk received:", event.data.size, "bytes");
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
-      };
-
-      mediaRecorder.onstop = async () => {
-        console.log("[Voice] Recording stopped, total chunks:", audioChunksRef.current.length);
-        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
-        console.log("[Voice] Audio blob size:", audioBlob.size, "bytes");
-        stream.getTracks().forEach(track => track.stop());
-        
-        // Don't process if audio is too short (less than 1KB)
-        if (audioBlob.size < 1000) {
-          console.log("[Voice] Audio too short, skipping STT");
-          toast({
-            title: "录音太短",
-            description: "请说话后再停止录音",
-          });
-          return;
-        }
-        
-        try {
-          const formData = new FormData();
-          // Use appropriate file extension based on mime type
-          const extension = mimeType.includes('mp4') ? 'mp4' : 'webm';
-          formData.append("audio", audioBlob, `recording.${extension}`);
-
-          console.log("[Voice] Sending audio to STT...");
-          const response = await fetch(STT_URL, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-            },
-            body: formData,
-          });
-
-          const responseText = await response.text();
-          console.log("[Voice] STT response status:", response.status);
-          console.log("[Voice] STT response:", responseText);
-
-          if (!response.ok) {
-            console.error("[Voice] STT response error:", response.status, responseText);
-            throw new Error("STT request failed");
-          }
-
-          const data = JSON.parse(responseText);
-          console.log("[Voice] STT result:", data);
-          
-          if (data.text && data.text.trim() && streamChatRef.current) {
-            console.log("[Voice] Sending text to chat:", data.text);
-            await streamChatRef.current(data.text);
-          } else if (data.error) {
-            console.error("[Voice] STT error:", data.error);
-            toast({
-              variant: "destructive",
-              title: "语音识别失败",
-              description: data.error,
-            });
-          } else {
-            toast({
-              title: "未检测到语音",
-              description: "请说话后再点击麦克风",
-            });
-          }
-        } catch (error) {
-          console.error("[Voice] STT error:", error);
-          toast({
-            variant: "destructive",
-            title: "语音识别失败",
-            description: "请稍后再试",
-          });
-        }
-      };
-
-      // Start recording with timeslice to get data periodically
-      mediaRecorder.start(1000); // Get data every 1 second
-      setIsRecording(true);
-      console.log("[Voice] Recording started");
-    } catch (error) {
-      console.error("[Voice] Recording error:", error);
-      toast({
-        variant: "destructive",
-        title: "无法访问麦克风",
-        description: "请允许麦克风访问权限",
-      });
-    }
-  }, []);
-
-  const playAudio = useCallback(async (text: string, autoListen: boolean = true) => {
-    try {
-      setIsSpeaking(true);
-      const response = await fetch(TTS_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
-        body: JSON.stringify({ text }),
-      });
-
-      if (!response.ok) {
-        throw new Error("TTS request failed");
-      }
-
-      const data = await response.json();
-      const audioUrl = `data:audio/mpeg;base64,${data.audioContent}`;
-      
-      if (audioRef.current) {
-        audioRef.current.pause();
-      }
-      
-      const audio = new Audio(audioUrl);
-      audioRef.current = audio;
-      
-      audio.onended = () => {
-        setIsSpeaking(false);
-        // Auto-start listening after AI finishes speaking
-        if (autoListen && autoListenEnabled) {
-          setTimeout(() => {
-            startRecordingInternal();
-          }, 500); // Small delay before auto-listening
-        }
-      };
-      audio.onerror = () => setIsSpeaking(false);
-      await audio.play();
-    } catch (error) {
-      console.error("TTS error:", error);
-      setIsSpeaking(false);
-    }
-  }, [autoListenEnabled, startRecordingInternal]);
 
   const extractResumeData = useCallback((content: string): ResumeData | null => {
     const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/);
@@ -263,8 +95,13 @@ export function useVoiceChat() {
         }),
       });
 
-      if (!response.ok || !response.body) {
-        throw new Error("Chat request failed");
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Chat request failed");
+      }
+      
+      if (!response.body) {
+        throw new Error("No response body");
       }
 
       const reader = response.body.getReader();
@@ -349,48 +186,17 @@ export function useVoiceChat() {
         setResumeData(resume);
         setWorkflowState(prev => ({ ...prev, currentPhase: "complete" }));
       }
-
-      // Play audio response (without JSON blocks and state updates)
-      const textToSpeak = cleanResponse(assistantContent)
-        .replace(/```json[\s\S]*?```/g, "")
-        .trim();
-      if (textToSpeak) {
-        await playAudio(textToSpeak);
-      }
     } catch (error) {
       console.error("Chat error:", error);
       toast({
         variant: "destructive",
         title: "发送失败",
-        description: "请稍后再试",
+        description: error instanceof Error ? error.message : "请稍后再试",
       });
     } finally {
       setIsLoading(false);
     }
-  }, [messages, playAudio, extractResumeData, workflowState]);
-
-  // Keep streamChatRef updated
-  useEffect(() => {
-    streamChatRef.current = streamChat;
-  }, [streamChat]);
-
-  // Public startRecording just calls the internal one
-  const startRecording = startRecordingInternal;
-
-  const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-    }
-  }, [isRecording]);
-
-  const stopSpeaking = useCallback(() => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
-      setIsSpeaking(false);
-    }
-  }, []);
+  }, [messages, extractResumeData, workflowState]);
 
   const startConversation = useCallback(async () => {
     // Reset state for new conversation
@@ -404,20 +210,14 @@ export function useVoiceChat() {
     // Start with AI greeting
     const greeting = "你好！我是职途的目标顾问。在开始优化简历之前，让我先了解一下你的职业目标。请问你想要应聘什么职位？";
     setMessages([{ role: "assistant", content: greeting, agent: "goal_clarifier" }]);
-    await playAudio(greeting);
-  }, [playAudio]);
+  }, []);
 
   return {
     messages,
     isLoading,
-    isRecording,
-    isSpeaking,
     resumeData,
     workflowState,
     currentAgent,
-    startRecording,
-    stopRecording,
-    stopSpeaking,
     streamChat,
     startConversation,
     setResumeData,
