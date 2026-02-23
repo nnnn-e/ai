@@ -9,6 +9,7 @@ interface ChatMessagesProps {
 }
 
 export function ChatMessages({ messages }: ChatMessagesProps) {
+  // Filter out JSON blocks and state updates for display
   const formatMessage = (content: string) => {
     return content
       .replace(/```json[\s\S]*?```/g, "")
@@ -18,73 +19,66 @@ export function ChatMessages({ messages }: ChatMessagesProps) {
 
   if (messages.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center px-8">
-        <p className="text-callout text-muted-foreground/60 text-center">
-          开始对话，让 AI 帮你打造简历
+      <div className="flex-1 flex items-center justify-center">
+        <p className="text-muted-foreground text-center">
+          点击麦克风开始对话
         </p>
       </div>
     );
   }
 
   return (
-    <ScrollArea className="flex-1 px-5">
-      <div className="space-y-5 py-5">
+    <ScrollArea className="flex-1 px-6">
+      <div className="space-y-6 py-6">
         {messages.map((message, index) => {
-          const agentInfo = message.agent
-            ? AGENT_DISPLAY_INFO[message.agent as AgentType]
+          const agentInfo = message.agent 
+            ? AGENT_DISPLAY_INFO[message.agent as AgentType] 
             : null;
           const showAgentLabel = message.role === "assistant" && agentInfo?.visible;
-          const displayContent = formatMessage(message.content);
-          if (!displayContent) return null;
-
+          
           return (
             <div
               key={index}
               className={cn(
-                "max-w-[88%] animate-fade-in",
+                "max-w-[85%]",
                 message.role === "user" ? "ml-auto" : "mr-auto"
               )}
             >
               {/* Agent label */}
               {showAgentLabel && (
-                <div className="mb-1.5">
-                  <span className="text-caption text-muted-foreground/70 font-medium">
+                <div className="mb-2">
+                  <Badge 
+                    variant="outline" 
+                    className="text-xs font-normal px-2 py-0.5"
+                  >
                     {agentInfo.icon} {agentInfo.label}
-                  </span>
+                  </Badge>
                 </div>
               )}
-
-              {/* Integrity warning */}
+              
+              {/* Integrity warning style */}
               {message.isIntegrityWarning && (
-                <div className="mb-1.5">
-                  <Badge
-                    variant="destructive"
-                    className="text-caption font-normal px-2 py-0.5 rounded-lg"
+                <div className="mb-2">
+                  <Badge 
+                    variant="destructive" 
+                    className="text-xs font-normal px-2 py-0.5"
                   >
                     🛡️ 诚信提醒
                   </Badge>
                 </div>
               )}
-
-              {/* Message bubble */}
-              <div
+              
+              <p
                 className={cn(
-                  "rounded-2xl px-4 py-3",
-                  message.role === "user"
-                    ? "bg-primary text-primary-foreground rounded-br-md"
-                    : "bg-secondary/60 text-foreground rounded-bl-md",
-                  message.isIntegrityWarning && "bg-destructive/10 border border-destructive/20"
+                  "text-sm leading-relaxed",
+                  message.role === "user" 
+                    ? "text-right text-muted-foreground" 
+                    : "text-left",
+                  message.isIntegrityWarning && "text-destructive"
                 )}
               >
-                <p
-                  className={cn(
-                    "text-sm leading-relaxed",
-                    message.isIntegrityWarning && "text-destructive"
-                  )}
-                >
-                  {displayContent}
-                </p>
-              </div>
+                {formatMessage(message.content)}
+              </p>
             </div>
           );
         })}

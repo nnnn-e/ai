@@ -9,6 +9,7 @@ interface WorkflowProgressProps {
   mode?: ResumeMode;
 }
 
+// Generate mode phases
 const GENERATE_PHASES_ORDER: WorkflowPhase[] = [
   "idle",
   "goal_clarification",
@@ -18,6 +19,7 @@ const GENERATE_PHASES_ORDER: WorkflowPhase[] = [
   "complete",
 ];
 
+// Optimize mode phases (existing)
 const OPTIMIZE_PHASES_ORDER: WorkflowPhase[] = [
   "idle",
   "goal_clarification",
@@ -29,51 +31,60 @@ const OPTIMIZE_PHASES_ORDER: WorkflowPhase[] = [
 ];
 
 export function WorkflowProgress({ currentPhase, currentAgent, mode = "generate" }: WorkflowProgressProps) {
-  const phasesOrder = mode === "generate" || mode === "hybrid"
-    ? GENERATE_PHASES_ORDER
+  const phasesOrder = mode === "generate" || mode === "hybrid" 
+    ? GENERATE_PHASES_ORDER 
     : OPTIMIZE_PHASES_ORDER;
-
+    
   const currentIndex = phasesOrder.indexOf(currentPhase);
-  const progress = phasesOrder.length > 1 ? currentIndex / (phasesOrder.length - 1) : 0;
 
   return (
-    <div className="space-y-2">
-      {/* Minimal progress bar */}
-      <div className="h-1 bg-muted rounded-full overflow-hidden">
-        <div
-          className="h-full bg-primary rounded-full transition-all duration-700 ease-out"
-          style={{ width: `${Math.max(progress * 100, 2)}%` }}
-        />
-      </div>
+    <ScrollArea className="w-full">
+      <div className="flex items-center gap-2 pb-2">
+        {phasesOrder.map((phase, index) => {
+          const phaseInfo = PHASE_DISPLAY_INFO[phase];
+          const isCompleted = index < currentIndex;
+          const isCurrent = index === currentIndex;
+          const isPending = index > currentIndex;
 
-      {/* Current phase label */}
-      <ScrollArea className="w-full">
-        <div className="flex items-center gap-1.5">
-          {phasesOrder.map((phase, index) => {
-            const phaseInfo = PHASE_DISPLAY_INFO[phase];
-            const isCompleted = index < currentIndex;
-            const isCurrent = index === currentIndex;
-
-            return (
-              <div
-                key={phase}
-                className={cn(
-                  "flex items-center gap-1 px-2 py-0.5 rounded-lg text-caption whitespace-nowrap transition-colors",
-                  isCurrent && "bg-primary/10 text-foreground font-medium",
-                  isCompleted && "text-muted-foreground",
-                  !isCurrent && !isCompleted && "text-muted-foreground/40"
-                )}
-              >
-                {isCompleted && (
-                  <span className="text-[10px]">✓</span>
-                )}
-                {phaseInfo?.label || phase}
+          return (
+            <div key={phase} className="flex items-center">
+              {/* Step indicator */}
+              <div className="flex flex-col items-center">
+                <div
+                  className={cn(
+                    "flex items-center justify-center w-6 h-6 rounded-full text-xs font-medium transition-colors",
+                    isCompleted && "bg-foreground text-background",
+                    isCurrent && "bg-foreground text-background",
+                    isPending && "bg-muted text-muted-foreground"
+                  )}
+                >
+                  {isCompleted ? "✓" : index + 1}
+                </div>
+                <span
+                  className={cn(
+                    "mt-1 text-xs whitespace-nowrap",
+                    isCurrent && "text-foreground font-medium",
+                    !isCurrent && "text-muted-foreground"
+                  )}
+                >
+                  {phaseInfo?.label || phase}
+                </span>
               </div>
-            );
-          })}
-        </div>
-        <ScrollBar orientation="horizontal" />
-      </ScrollArea>
-    </div>
+
+              {/* Connector line */}
+              {index < phasesOrder.length - 1 && (
+                <div
+                  className={cn(
+                    "w-8 h-0.5 mx-2",
+                    index < currentIndex ? "bg-foreground" : "bg-muted"
+                  )}
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <ScrollBar orientation="horizontal" />
+    </ScrollArea>
   );
 }

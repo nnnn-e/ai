@@ -7,7 +7,7 @@ import { WorkflowProgress } from "@/components/WorkflowProgress";
 import { toast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Button } from "@/components/ui/button";
-import { FileText, MessageSquare, Sparkles, Upload, ArrowRight } from "lucide-react";
+import { FileText, MessageSquare, Sparkles, Upload } from "lucide-react";
 import html2pdf from "html2pdf.js";
 import type { ResumeMode } from "@/types/resume";
 
@@ -63,48 +63,36 @@ const Index = () => {
     }
   };
 
-  // Landing page — Apple-style hero
+  // Landing page with mode selection
   if (!hasStarted) {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 relative overflow-hidden">
-        {/* Subtle ambient gradient */}
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full bg-primary/[0.02] blur-3xl" />
-        </div>
-
-        <div className="relative text-center max-w-lg animate-fade-in">
-          {/* Logo mark */}
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary text-primary-foreground mb-8 shadow-lg">
-            <FileText className="w-7 h-7" />
-          </div>
-
-          <h1 className="text-display mb-3">职途</h1>
-          <p className="text-body text-muted-foreground mb-12 max-w-sm mx-auto">
-            通过 AI 对话，将你的经历转化为专业简历
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6">
+        <div className="text-center max-w-md">
+          <h1 className="text-4xl font-light tracking-wide mb-4">职途</h1>
+          <p className="text-muted-foreground mb-12">
+            AI简历优化大师
           </p>
-
-          {/* CTA cards */}
-          <div className="flex flex-col sm:flex-row gap-3 justify-center mb-10">
+          
+          {/* Mode selection buttons */}
+          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">
             <button
               onClick={() => handleStart("generate")}
-              className="group relative flex items-center gap-3 bg-primary text-primary-foreground px-8 py-4 rounded-2xl text-callout shadow-md hover:shadow-lg transition-all duration-300 transition-spring hover:scale-[1.02]"
+              className="flex items-center justify-center gap-2 bg-foreground text-background px-6 py-3 text-sm tracking-wide hover:opacity-80 transition-opacity"
             >
-              <Sparkles className="w-4 h-4 opacity-80" />
+              <Sparkles className="w-4 h-4" />
               从零开始写简历
-              <ArrowRight className="w-4 h-4 opacity-0 -ml-2 group-hover:opacity-60 group-hover:ml-0 transition-all duration-300" />
             </button>
             <button
               onClick={() => handleStart("optimize")}
-              className="group flex items-center gap-3 border border-border bg-card text-foreground px-8 py-4 rounded-2xl text-callout shadow-sm hover:shadow-md transition-all duration-300 transition-spring hover:scale-[1.02]"
+              className="flex items-center justify-center gap-2 border border-foreground text-foreground px-6 py-3 text-sm tracking-wide hover:bg-foreground/5 transition-colors"
             >
-              <Upload className="w-4 h-4 opacity-60" />
+              <Upload className="w-4 h-4" />
               优化现有简历
-              <ArrowRight className="w-4 h-4 opacity-0 -ml-2 group-hover:opacity-40 group-hover:ml-0 transition-all duration-300" />
             </button>
           </div>
-
-          <p className="text-footnote text-muted-foreground/60">
-            支持从零生成 · 智能优化 · ATS 友好
+          
+          <p className="text-xs text-muted-foreground">
+            通过对话，让AI帮你梳理职业经历，生成专业简历
           </p>
         </div>
       </div>
@@ -115,60 +103,60 @@ const Index = () => {
   if (isMobile) {
     return (
       <div className="min-h-screen bg-background flex flex-col">
-        {/* Header */}
-        <header className="px-4 py-3 glass-light border-b border-border/50 sticky top-0 z-10">
+        {/* Header with progress */}
+        <div className="px-4 py-3">
           <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-primary text-primary-foreground flex items-center justify-center">
-                <FileText className="w-3.5 h-3.5" />
-              </div>
-              <h1 className="text-title">职途</h1>
-            </div>
+            <h1 className="text-lg font-light tracking-wide">职途</h1>
             <Button
-              variant="secondary"
+              variant="outline"
               size="sm"
               onClick={() => setMobileView(mobileView === "chat" ? "resume" : "chat")}
-              className="gap-1.5 rounded-xl text-xs"
+              className="gap-2"
             >
               {mobileView === "chat" ? (
                 <>
-                  <FileText className="w-3.5 h-3.5" />
-                  简历
+                  <FileText className="w-4 h-4" />
+                  查看简历
                 </>
               ) : (
                 <>
-                  <MessageSquare className="w-3.5 h-3.5" />
-                  对话
+                  <MessageSquare className="w-4 h-4" />
+                  返回对话
                 </>
               )}
             </Button>
           </div>
-          <WorkflowProgress
-            currentPhase={workflowState.currentPhase}
+          <WorkflowProgress 
+            currentPhase={workflowState.currentPhase} 
             currentAgent={currentAgent}
             mode={workflowState.mode}
           />
-        </header>
+        </div>
 
         {mobileView === "chat" ? (
           <>
+            {/* Messages */}
             <ChatMessages messages={messages} />
+
+            {/* Loading indicator */}
             {isLoading && (
-              <div className="text-center py-3">
-                <span className="text-footnote text-muted-foreground animate-pulse-soft">
-                  正在思考…
+              <div className="text-center py-2">
+                <span className="text-sm text-muted-foreground">
+                  思考中...
                 </span>
               </div>
             )}
+
+            {/* Text input */}
             <ChatInput onSend={streamChat} isLoading={isLoading} />
           </>
         ) : (
           <div className="flex-1">
-            <ResumePanel
-              resume={resumeData}
+            <ResumePanel 
+              resume={resumeData} 
               fullResume={fullResumeData}
               factReadiness={workflowState.factReadiness}
-              onExport={handleExportPDF}
+              onExport={handleExportPDF} 
             />
           </div>
         )}
@@ -179,49 +167,44 @@ const Index = () => {
   // Desktop: Split layout
   return (
     <div className="h-screen bg-background flex">
-      {/* Left: Chat panel */}
-      <div className="w-[32%] min-w-[360px] flex flex-col border-r border-border/40">
-        {/* Header */}
-        <header className="px-6 pt-5 pb-3">
-          <div className="flex items-center gap-2.5 mb-4">
-            <div className="w-8 h-8 rounded-xl bg-primary text-primary-foreground flex items-center justify-center shadow-sm">
-              <FileText className="w-4 h-4" />
-            </div>
-            <h1 className="text-title">职途</h1>
+      {/* Left: Header + Chat */}
+      <div className="w-[30%] flex flex-col">
+        {/* Header with progress */}
+        <div className="px-6 py-4">
+          <div className="flex items-center justify-between mb-2">
+            <h1 className="text-lg font-light tracking-wide">职途</h1>
           </div>
-          <WorkflowProgress
-            currentPhase={workflowState.currentPhase}
+          <WorkflowProgress 
+            currentPhase={workflowState.currentPhase} 
             currentAgent={currentAgent}
             mode={workflowState.mode}
           />
-        </header>
+        </div>
 
         {/* Messages */}
         <ChatMessages messages={messages} />
 
-        {/* Loading */}
+        {/* Loading indicator */}
         {isLoading && (
-          <div className="text-center py-3">
-            <span className="text-footnote text-muted-foreground animate-pulse-soft">
-              正在思考…
+          <div className="text-center py-2">
+            <span className="text-sm text-muted-foreground">
+              思考中...
             </span>
           </div>
         )}
 
-        {/* Input */}
+        {/* Text input */}
         <ChatInput onSend={streamChat} isLoading={isLoading} />
       </div>
 
       {/* Right: Resume Preview */}
-      <div className="flex-1 p-4">
-        <div className="h-full rounded-2xl bg-card shadow-sm overflow-hidden border border-border/30">
-          <ResumePanel
-            resume={resumeData}
-            fullResume={fullResumeData}
-            factReadiness={workflowState.factReadiness}
-            onExport={handleExportPDF}
-          />
-        </div>
+      <div className="flex-1 m-4 rounded-xl bg-card overflow-hidden">
+        <ResumePanel 
+          resume={resumeData} 
+          fullResume={fullResumeData}
+          factReadiness={workflowState.factReadiness}
+          onExport={handleExportPDF} 
+        />
       </div>
     </div>
   );

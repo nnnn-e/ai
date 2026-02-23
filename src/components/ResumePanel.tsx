@@ -1,4 +1,4 @@
-import type { ResumeData, FullResumeData } from "@/types/resume";
+import type { ResumeData, FullResumeData, FactReadinessLevel } from "@/types/resume";
 import { getFactReadinessLevel, FACT_READINESS_MESSAGES, toResumeData } from "@/types/resume";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
@@ -16,48 +16,46 @@ interface ResumePanelProps {
 export function ResumePanel({ resume, fullResume, factReadiness = 0, onExport }: ResumePanelProps) {
   const readinessLevel = getFactReadinessLevel(factReadiness);
   const statusMessage = FACT_READINESS_MESSAGES[readinessLevel];
-
+  
+  // Get renderable sections from ui_state
+  const renderableSections = fullResume?.ui_state?.renderable_sections || [];
   const highlightedSections = fullResume?.ui_state?.highlighted_sections || [];
   const showFallback = fullResume?.ui_state?.show_fallback || false;
   const draftVersion = fullResume?.ui_state?.draft_version || 0;
-
+  
+  // Determine what to show based on fact readiness
   const showEmptyState = readinessLevel === "empty" && !resume;
   const showPartialState = readinessLevel === "partial";
   const showReadyState = readinessLevel === "ready";
 
-  // Empty state
+  // Empty state - no resume data yet
   if (showEmptyState) {
     return (
-      <div className="h-full flex flex-col items-center justify-center text-muted-foreground p-8">
-        <div className="relative mb-6 animate-fade-in">
-          <div className="w-20 h-20 rounded-3xl bg-muted/50 flex items-center justify-center">
-            <FileText className="w-8 h-8 opacity-30" />
-          </div>
-          <div className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
-            <Sparkles className="w-3 h-3 text-primary animate-pulse-soft" />
-          </div>
+      <div className="h-full flex flex-col items-center justify-center text-muted-foreground p-6">
+        <div className="relative">
+          <FileText className="w-12 h-12 mb-4 opacity-50" />
+          <Sparkles className="w-5 h-5 absolute -top-1 -right-1 text-primary animate-pulse" />
         </div>
-        <p className="text-callout text-center max-w-[220px] mb-2">
+        <p className="text-center text-sm max-w-[200px]">
           {statusMessage}
         </p>
-        <div className="mt-4 flex items-center gap-1.5">
-          <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/20 animate-pulse-soft" style={{ animationDelay: "0s" }} />
-          <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/20 animate-pulse-soft" style={{ animationDelay: "0.3s" }} />
-          <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/20 animate-pulse-soft" style={{ animationDelay: "0.6s" }} />
+        <div className="mt-6 flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-muted-foreground/30" />
+          <div className="w-2 h-2 rounded-full bg-muted-foreground/30" />
+          <div className="w-2 h-2 rounded-full bg-muted-foreground/30" />
         </div>
       </div>
     );
   }
 
+  // Render resume content
   const displayResume = resume || (fullResume ? toResumeData(fullResume) : null);
-
+  
   if (!displayResume) {
     return (
-      <div className="h-full flex flex-col items-center justify-center text-muted-foreground p-8">
-        <div className="w-16 h-16 rounded-2xl bg-muted/50 flex items-center justify-center mb-4">
-          <FileText className="w-7 h-7 opacity-30" />
-        </div>
-        <p className="text-callout text-center">
+      <div className="h-full flex flex-col items-center justify-center text-muted-foreground p-6">
+        <FileText className="w-12 h-12 mb-4 opacity-50" />
+        <p className="text-center text-sm">
           对话完成后将在这里生成简历预览
         </p>
       </div>
@@ -66,69 +64,69 @@ export function ResumePanel({ resume, fullResume, factReadiness = 0, onExport }:
 
   return (
     <div className="h-full flex flex-col">
-      {/* Header bar */}
-      <div className="flex items-center justify-between px-5 py-3.5 border-b border-border/40">
-        <div className="flex items-center gap-2.5">
-          <span className="text-callout">简历预览</span>
+      {/* Header with status and export button */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium">简历预览</span>
           {showPartialState && (
-            <Badge variant="secondary" className="text-caption rounded-lg px-2">
+            <Badge variant="secondary" className="text-xs">
               草稿 v{draftVersion}
             </Badge>
           )}
           {showReadyState && (
-            <Badge className="text-caption rounded-lg px-2 bg-success text-success-foreground">
+            <Badge variant="default" className="text-xs bg-primary">
               可投递
             </Badge>
           )}
           {showFallback && (
-            <Badge variant="outline" className="text-caption rounded-lg text-destructive border-destructive/30">
+            <Badge variant="outline" className="text-xs text-destructive border-destructive/30">
               <AlertCircle className="w-3 h-3 mr-1" />
               基础版
             </Badge>
           )}
         </div>
         <Button
-          variant="secondary"
+          variant="outline"
           size="sm"
           onClick={onExport}
-          className="gap-1.5 rounded-xl text-xs"
+          className="gap-2"
           disabled={readinessLevel === "empty"}
         >
-          <Download className="w-3.5 h-3.5" />
+          <Download className="w-4 h-4" />
           导出 PDF
         </Button>
       </div>
-
-      {/* Status banner */}
+      
+      {/* Status message bar */}
       {(showPartialState || showFallback) && (
         <div className={cn(
-          "px-5 py-2 text-caption border-b",
-          showFallback
-            ? "bg-destructive/5 text-destructive border-destructive/10"
-            : "bg-primary/[0.03] text-muted-foreground border-border/30"
+          "px-4 py-2 text-xs border-b",
+          showFallback 
+            ? "bg-destructive/10 text-destructive border-destructive/20" 
+            : "bg-primary/5 text-primary border-primary/10"
         )}>
           {fullResume?.ui_state?.status_message || statusMessage}
         </div>
       )}
 
-      {/* Resume body */}
+      {/* Resume Content */}
       <ScrollArea className="flex-1">
-        <div id="resume-content" className="p-8 max-w-2xl mx-auto">
-          {/* Name & Title */}
+        <div id="resume-content" className="p-6">
+          {/* Name and Title */}
           <div className={cn(
-            "text-center mb-8 pb-6 border-b border-border/30",
-            highlightedSections.includes("basics") && "ring-1 ring-primary/20 rounded-xl p-4"
+            "text-center mb-6",
+            highlightedSections.includes("basics") && "ring-2 ring-primary/30 rounded-lg p-2"
           )}>
-            <h1 className="text-headline mb-1.5">
+            <h1 className="text-2xl font-light tracking-wide mb-1">
               {displayResume.name || "姓名待填写"}
             </h1>
-            <p className="text-callout text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               {displayResume.title || "职位待确定"}
             </p>
           </div>
 
           {/* Contact */}
-          <div className="flex flex-wrap justify-center gap-4 text-caption text-muted-foreground mb-8">
+          <div className="flex flex-wrap justify-center gap-4 text-xs text-muted-foreground mb-6">
             {displayResume.contact.email && <span>{displayResume.contact.email}</span>}
             {displayResume.contact.phone && <span>{displayResume.contact.phone}</span>}
             {displayResume.contact.location && <span>{displayResume.contact.location}</span>}
@@ -136,57 +134,58 @@ export function ResumePanel({ resume, fullResume, factReadiness = 0, onExport }:
 
           {/* Summary */}
           {displayResume.summary && (
-            <section className={cn(
-              "mb-8",
-              highlightedSections.includes("summary") && "ring-1 ring-primary/20 rounded-xl p-3"
+            <div className={cn(
+              "mb-6",
+              highlightedSections.includes("summary") && "ring-2 ring-primary/30 rounded-lg p-2"
             )}>
-              <h2 className="text-subheadline text-muted-foreground mb-3">
+              <h2 className="text-xs uppercase tracking-widest text-muted-foreground mb-2">
                 个人简介
               </h2>
               <p className="text-sm leading-relaxed">{displayResume.summary}</p>
-            </section>
+            </div>
           )}
 
           {/* Experience */}
           {displayResume.experience.length > 0 && (
-            <section className={cn(
-              "mb-8",
-              highlightedSections.includes("experience") && "ring-1 ring-primary/20 rounded-xl p-3"
+            <div className={cn(
+              "mb-6",
+              highlightedSections.includes("experience") && "ring-2 ring-primary/30 rounded-lg p-2"
             )}>
-              <h2 className="text-subheadline text-muted-foreground mb-4">
+              <h2 className="text-xs uppercase tracking-widest text-muted-foreground mb-3">
                 工作经历
               </h2>
-              <div className="space-y-5">
+              <div className="space-y-4">
                 {displayResume.experience.map((exp, index) => {
                   const isHighlighted = highlightedSections.some(s => s.startsWith(`experience[${index}]`));
+                  
                   return (
-                    <div
+                    <div 
                       key={index}
                       className={cn(
-                        "relative",
-                        isHighlighted && "bg-accent/50 rounded-xl p-3 -mx-3"
+                        isHighlighted && "bg-accent rounded-lg p-2 -mx-2"
                       )}
                     >
-                      <div className="flex justify-between items-baseline mb-1.5">
+                      <div className="flex justify-between items-baseline mb-1">
                         <div>
-                          <h3 className="text-sm font-semibold">{exp.position}</h3>
-                          <p className="text-caption text-muted-foreground">{exp.company}</p>
+                          <h3 className="text-sm font-medium">{exp.position}</h3>
+                          <p className="text-xs text-muted-foreground">{exp.company}</p>
                         </div>
-                        <span className="text-caption text-muted-foreground/70 flex-shrink-0 ml-4">{exp.period}</span>
+                        <span className="text-xs text-muted-foreground">{exp.period}</span>
                       </div>
                       {exp.highlights.length > 0 && (
-                        <ul className="space-y-1 mt-2">
+                        <ul className="text-xs space-y-0.5 mt-1">
                           {exp.highlights.map((highlight, i) => {
                             const bulletHighlighted = highlightedSections.includes(`experience[${index}].bullets[${i}]`);
+                            
                             return (
-                              <li
-                                key={i}
+                              <li 
+                                key={i} 
                                 className={cn(
-                                  "text-caption leading-relaxed text-muted-foreground pl-3 relative before:absolute before:left-0 before:top-[7px] before:w-1 before:h-1 before:rounded-full before:bg-muted-foreground/30",
-                                  bulletHighlighted && "text-foreground font-medium bg-primary/5 rounded-lg px-2 py-0.5 before:bg-primary"
+                                  "leading-relaxed text-muted-foreground",
+                                  bulletHighlighted && "text-foreground font-medium bg-primary/10 rounded px-1"
                                 )}
                               >
-                                {highlight}
+                                · {highlight}
                               </li>
                             );
                           })}
@@ -196,62 +195,56 @@ export function ResumePanel({ resume, fullResume, factReadiness = 0, onExport }:
                   );
                 })}
               </div>
-            </section>
+            </div>
           )}
 
           {/* Education */}
           {displayResume.education.length > 0 && (
-            <section className={cn(
-              "mb-8",
-              highlightedSections.includes("education") && "ring-1 ring-primary/20 rounded-xl p-3"
+            <div className={cn(
+              "mb-6",
+              highlightedSections.includes("education") && "ring-2 ring-primary/30 rounded-lg p-2"
             )}>
-              <h2 className="text-subheadline text-muted-foreground mb-4">
+              <h2 className="text-xs uppercase tracking-widest text-muted-foreground mb-3">
                 教育背景
               </h2>
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {displayResume.education.map((edu, index) => (
                   <div key={index} className="flex justify-between items-baseline">
                     <div>
-                      <h3 className="text-sm font-semibold">{edu.school}</h3>
-                      <p className="text-caption text-muted-foreground">{edu.degree}</p>
+                      <h3 className="text-sm font-medium">{edu.school}</h3>
+                      <p className="text-xs text-muted-foreground">{edu.degree}</p>
                     </div>
-                    <span className="text-caption text-muted-foreground/70 flex-shrink-0 ml-4">{edu.period}</span>
+                    <span className="text-xs text-muted-foreground">{edu.period}</span>
                   </div>
                 ))}
               </div>
-            </section>
+            </div>
           )}
 
           {/* Skills */}
           {displayResume.skills.length > 0 && (
-            <section className={cn(
-              highlightedSections.includes("skills") && "ring-1 ring-primary/20 rounded-xl p-3"
+            <div className={cn(
+              highlightedSections.includes("skills") && "ring-2 ring-primary/30 rounded-lg p-2"
             )}>
-              <h2 className="text-subheadline text-muted-foreground mb-3">
+              <h2 className="text-xs uppercase tracking-widest text-muted-foreground mb-2">
                 专业技能
               </h2>
-              <div className="flex flex-wrap gap-1.5">
-                {displayResume.skills.map((skill, i) => (
-                  <span key={i} className="text-caption bg-secondary/60 text-secondary-foreground px-2.5 py-1 rounded-lg">
-                    {skill}
-                  </span>
-                ))}
-              </div>
-            </section>
+              <p className="text-xs text-muted-foreground">{displayResume.skills.join(" · ")}</p>
+            </div>
           )}
-
-          {/* Fact readiness bar */}
+          
+          {/* Fact Readiness Indicator (only in partial state) */}
           {showPartialState && (
-            <div className="mt-10 pt-5 border-t border-dashed border-border/40">
-              <div className="flex items-center gap-3 text-caption text-muted-foreground">
-                <span className="flex-shrink-0">完成度</span>
+            <div className="mt-8 pt-4 border-t border-dashed">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>完成度</span>
                 <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-primary rounded-full transition-all duration-700 ease-out"
+                  <div 
+                    className="h-full bg-primary transition-all duration-500"
                     style={{ width: `${Math.round(factReadiness * 100)}%` }}
                   />
                 </div>
-                <span className="flex-shrink-0 font-medium text-foreground">{Math.round(factReadiness * 100)}%</span>
+                <span>{Math.round(factReadiness * 100)}%</span>
               </div>
             </div>
           )}
